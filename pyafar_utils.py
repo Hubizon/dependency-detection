@@ -46,19 +46,20 @@ def run_infant(input_path, AUs=AUs_infant):
 
 
 def run_adult(input_path, AUs=AUs_adult, AU_Int=AUs_adult_int):
-    infant_result = adult_afar.adult_afar(filename=input_path, AUs=AUs, GPU=True, max_frames=float('inf'),
+    adult_result = adult_afar.adult_afar(filename=input_path, AUs=AUs, GPU=True, max_frames=float('inf'),
                                           AU_Int=AU_Int, batch_size=128, PID=False)
 
     # For some reason, sometimes there's more Frames than other columns
-    min_length = min(len(values) for values in infant_result.values())
-    for key in infant_result:
-        infant_result[key] = infant_result[key][:min_length]
+    min_length = min(len(values) for values in adult_result.values())
+    for key in adult_result:
+        adult_result[key] = adult_result[key][:min_length]
 
-    df = pd.DataFrame.from_dict(infant_result)
+    df = pd.DataFrame.from_dict(adult_result)
     return df
 
 
 def save_video_with_au(df, input_path, output_path, landmarks=True, max_frames=float('inf')):
+    df = fix_dataframe(df)
     cap = cv2.VideoCapture(input_path)
 
     # Check if the video is opened successfully
@@ -170,14 +171,17 @@ def merge_videos_vertically(input_paths, output_path):
     frame_width = int(caps[0].get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(caps[0].get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(caps[0].get(cv2.CAP_PROP_FPS))
-    frame_count = int(caps[0].get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_count = min(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) for cap in caps)
 
     # Ensure all videos are of the same size and length
     for cap in caps:
         if (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) != frame_width or
                 int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) != frame_height or
-                int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) != frame_count):
-            raise ValueError("All videos must have the same resolution and frame count")
+                int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) < frame_count):
+            raise ValueError("All videos must have the same resolution")
+        if int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) != frame_count:
+            print("A video doesn't have the same number of frames - cropping")
+            [cap.read() for _ in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) - frame_count)]
 
     # Define output video properties
     out_height = frame_height * len(input_paths)
